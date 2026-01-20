@@ -2188,6 +2188,7 @@ const std::map<std::string, script_verify_flag_name>& ScriptFlagNamesToEnum()
         FLAG_NAME(CONST_SCRIPTCODE),
         FLAG_NAME(TAPROOT),
         FLAG_NAME(DISCOURAGE_UPGRADABLE_PUBKEYTYPE),
+        FLAG_NAME(FALCON),
         FLAG_NAME(DISCOURAGE_OP_SUCCESS),
         FLAG_NAME(DISCOURAGE_UPGRADABLE_TAPROOT_VERSION),
     };
