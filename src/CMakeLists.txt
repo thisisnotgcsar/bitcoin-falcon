@@ -58,6 +58,21 @@ if(ENABLE_IPC)
   add_subdirectory(ipc)
 endif()
 
+# Falcon static library
+add_library(falcon STATIC
+    falcon/codec.c
+    falcon/common.c
+    falcon/deterministic.c
+    falcon/falcon.c
+    falcon/fft.c
+    falcon/fpr.c
+    falcon/keygen.c
+    falcon/rng.c
+    falcon/shake.c
+    falcon/sign.c
+    falcon/vrfy.c
+)
+
 add_library(bitcoin_consensus STATIC EXCLUDE_FROM_ALL
   arith_uint256.cpp
   consensus/merkle.cpp
@@ -76,6 +91,7 @@ target_link_libraries(bitcoin_consensus
     core_interface
     bitcoin_crypto
     secp256k1
+    falcon
 )
 
 if(WITH_ZMQ)
