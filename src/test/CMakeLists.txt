@@ -131,6 +131,7 @@ add_executable(test_bitcoin
   validation_tests.cpp
   validationinterface_tests.cpp
   versionbits_tests.cpp
+  falcon_script_tests.cpp
 )
 
 include(TargetDataSources)
