@@ -341,11 +341,16 @@ static bool EvalChecksigPreTapscript(const valtype& vchSig, const valtype& vchPu
     }
 
     if (!CheckSignatureEncoding(vchSig, flags, serror) || !CheckPubKeyEncoding(vchPubKey, flags, sigversion, serror)) {
-        //serror is set
+        // serror is set
         return false;
     }
-    
-    fSuccess = checker.CheckFalconSignature(vchSig, vchPubKey, scriptCode, sigversion);
+
+    if ((flags & SCRIPT_VERIFY_FALCON) != 0) {
+        fSuccess = checker.CheckFalconSignature(vchSig, vchPubKey, scriptCode, sigversion);
+    }
+    else {
+        fSuccess = checker.CheckECDSASignature(vchSig, vchPubKey, scriptCode, sigversion);
+    }    
 
     if (!fSuccess && (flags & SCRIPT_VERIFY_NULLFAIL) && vchSig.size())
         return set_error(serror, SCRIPT_ERR_SIG_NULLFAIL);
@@ -1692,12 +1697,8 @@ bool GenericTransactionSignatureChecker<T>::VerifyECDSASignature(const std::vect
 }
 
 template <class T>
-bool GenericTransactionSignatureChecker<T>::VerifyFalconSignature(const std::vector<unsigned char>& vchSig, const CPubKey& vchPubKey, const uint256& sighash) const
+bool GenericTransactionSignatureChecker<T>::VerifyFalconSignature(const std::vector<unsigned char>& vchSig, const std::vector<unsigned char>& vchPubKey, const uint256& sighash) const
 {
-    // Falcon public key and signature must be in raw format.
-    // vchPubKey: Falcon public key bytes
-    // vchSig: Falcon signature bytes
-    // sighash: 32-byte message hash
 
     // Get logn from public key
     int logn = falcon_get_logn(vchPubKey.data(), vchPubKey.size());
@@ -1749,24 +1750,32 @@ bool GenericTransactionSignatureChecker<T>::CheckECDSASignature(const std::vecto
 template <class T>
 bool GenericTransactionSignatureChecker<T>::CheckFalconSignature(const std::vector<unsigned char>& vchSigIn, const std::vector<unsigned char>& vchPubKey,const CScript& scriptCode, SigVersion sigversion) const
 {
-    CPubKey pubkey(vchPubKey);
-    if (!pubkey.IsValid())
-        return false;
+    // At the moment CPubKey is made for ECDSA keys only.
+    // an appropriate public key class for Falcon keys should be created.
+    
+    // CPubKey pubkey(vchPubKey);
+    // if (!pubkey.IsValid()){
+    //     return false;
+    // }
 
     // Hash type is one byte tacked on to the end of the signature
     std::vector<unsigned char> vchSig(vchSigIn);
-    if (vchSig.empty())
+    if (vchSig.empty()){
         return false;
+    }
     int nHashType = vchSig.back();
     vchSig.pop_back();
 
     // Witness sighashes need the amount.
-    if (sigversion == SigVersion::WITNESS_V0 && amount < 0) return HandleMissingData(m_mdb);
+    if (sigversion == SigVersion::WITNESS_V0 && amount < 0) {
+        return HandleMissingData(m_mdb);
+    }
 
     uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata, &m_sighash_cache);
-
-    if (!VerifyFalconSignature(vchSig, pubkey, sighash))
+    
+    if (!VerifyFalconSignature(vchSig, vchPubKey, sighash)){
         return false;
+    }
 
     return true;
 }
@@ -2074,18 +2083,23 @@ bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const C
     // scriptSig and scriptPubKey must be evaluated sequentially on the same stack
     // rather than being simply concatenated (see CVE-2010-5141)
     std::vector<std::vector<unsigned char> > stack, stackCopy;
-    if (!EvalScript(stack, scriptSig, flags, checker, SigVersion::BASE, serror))
+    if (!EvalScript(stack, scriptSig, flags, checker, SigVersion::BASE, serror)){
         // serror is set
         return false;
-    if (flags & SCRIPT_VERIFY_P2SH)
+    }
+    if (flags & SCRIPT_VERIFY_P2SH) {
         stackCopy = stack;
-    if (!EvalScript(stack, scriptPubKey, flags, checker, SigVersion::BASE, serror))
+    }
+    if (!EvalScript(stack, scriptPubKey, flags, checker, SigVersion::BASE, serror)){
         // serror is set
         return false;
-    if (stack.empty())
+    }
+    if (stack.empty()){
         return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
-    if (CastToBool(stack.back()) == false)
+    }
+    if (CastToBool(stack.back()) == false){
         return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
+    }
 
     // Bare witness programs
     int witnessversion;
@@ -2128,10 +2142,13 @@ bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const C
         if (!EvalScript(stack, pubKey2, flags, checker, SigVersion::BASE, serror))
             // serror is set
             return false;
-        if (stack.empty())
+        if (stack.empty()){
             return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
-        if (!CastToBool(stack.back()))
+        }
+            
+        if (!CastToBool(stack.back())){
             return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
+        }
 
         // P2SH witness program
         if (flags & SCRIPT_VERIFY_WITNESS) {

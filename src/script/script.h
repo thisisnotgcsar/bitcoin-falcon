@@ -25,7 +25,12 @@
 #include <vector>
 
 // Maximum number of bytes pushable to the stack
-static const unsigned int MAX_SCRIPT_ELEMENT_SIZE = 520;
+// increased the size of a single push from 520 to 900 bytes
+// to fit FALCON Public Key Size (897 bytes for logn=9)
+// see FALCON_PUBKEY_SIZE(logn);
+// note that Publick Key is larger in bytes wrt Signature Size 
+// (max 752 bytes for logn=9, see FALCON_SIG_COMPRESSED_MAXSIZE(logn))
+static const unsigned int MAX_SCRIPT_ELEMENT_SIZE = 900;
 
 // Maximum number of non-push operations per script
 static const int MAX_OPS_PER_SCRIPT = 201;
