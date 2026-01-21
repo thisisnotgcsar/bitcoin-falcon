@@ -345,9 +345,7 @@ static bool EvalChecksigPreTapscript(const valtype& vchSig, const valtype& vchPu
         return false;
     }
     
-    else {
-        fSuccess = checker.CheckFalconSignature(vchSig, vchPubKey, scriptCode, sigversion);
-    }
+    fSuccess = checker.CheckFalconSignature(vchSig, vchPubKey, scriptCode, sigversion);
 
     if (!fSuccess && (flags & SCRIPT_VERIFY_NULLFAIL) && vchSig.size())
         return set_error(serror, SCRIPT_ERR_SIG_NULLFAIL);
