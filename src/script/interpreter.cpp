@@ -8,6 +8,7 @@
 #include <crypto/ripemd160.h>
 #include <crypto/sha1.h>
 #include <crypto/sha256.h>
+#include <falcon/falcon.h>
 #include <pubkey.h>
 #include <script/script.h>
 #include <tinyformat.h>
@@ -204,7 +205,11 @@ bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, script_ver
     if (vchSig.size() == 0) {
         return true;
     }
-    if ((flags & (SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_LOW_S | SCRIPT_VERIFY_STRICTENC)) != 0 && !IsValidSignatureEncoding(vchSig)) {
+    if ((flags & SCRIPT_VERIFY_FALCON) != 0) {
+        // Falcon signatures are not DER encoded, skip the checks
+        return true;
+    }
+    else if ((flags & (SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_LOW_S | SCRIPT_VERIFY_STRICTENC)) != 0 && !IsValidSignatureEncoding(vchSig)) {
         return set_error(serror, SCRIPT_ERR_SIG_DER);
     } else if ((flags & SCRIPT_VERIFY_LOW_S) != 0 && !IsLowDERSignature(vchSig, serror)) {
         // serror is set
@@ -216,6 +221,9 @@ bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, script_ver
 }
 
 bool static CheckPubKeyEncoding(const valtype &vchPubKey, script_verify_flags flags, const SigVersion &sigversion, ScriptError* serror) {
+    if ((flags & SCRIPT_VERIFY_FALCON) != 0) {
+        return true;
+    }
     if ((flags & SCRIPT_VERIFY_STRICTENC) != 0 && !IsCompressedOrUncompressedPubKey(vchPubKey)) {
         return set_error(serror, SCRIPT_ERR_PUBKEYTYPE);
     }
@@ -336,7 +344,13 @@ static bool EvalChecksigPreTapscript(const valtype& vchSig, const valtype& vchPu
         //serror is set
         return false;
     }
-    fSuccess = checker.CheckECDSASignature(vchSig, vchPubKey, scriptCode, sigversion);
+    if ((flags & SCRIPT_VERIFY_FALCON) != 0) {
+        // Falcon signatures are not DER encoded, skip the checks
+        return true;
+    }
+    else {
+        fSuccess = checker.CheckECDSASignature(vchSig, vchPubKey, scriptCode, sigversion);
+    }
 
     if (!fSuccess && (flags & SCRIPT_VERIFY_NULLFAIL) && vchSig.size())
         return set_error(serror, SCRIPT_ERR_SIG_NULLFAIL);
@@ -1683,6 +1697,30 @@ bool GenericTransactionSignatureChecker<T>::VerifyECDSASignature(const std::vect
 }
 
 template <class T>
+bool GenericTransactionSignatureChecker<T>::VerifyFalconSignature(const std::vector<unsigned char>& vchSig, const CPubKey& vchPubKey, const uint256& sighash) const
+{
+    // Falcon public key and signature must be in raw format.
+    // vchPubKey: Falcon public key bytes
+    // vchSig: Falcon signature bytes
+    // sighash: 32-byte message hash
+
+    // Get logn from public key
+    int logn = falcon_get_logn(vchPubKey.data(), vchPubKey.size());
+    if (logn < 1 || logn > 10) return false;
+
+    size_t tmp_len = FALCON_TMPSIZE_VERIFY(logn);
+    std::vector<unsigned char> tmp(tmp_len);
+
+    int ret = falcon_verify(
+        vchSig.data(), vchSig.size(), 0, // sig_type=0: auto-detect
+        vchPubKey.data(), vchPubKey.size(),
+        sighash.begin(), sizeof(uint256),
+        tmp.data(), tmp.size()
+    );
+    return ret == 0;
+}
+
+template <class T>
 bool GenericTransactionSignatureChecker<T>::VerifySchnorrSignature(std::span<const unsigned char> sig, const XOnlyPubKey& pubkey, const uint256& sighash) const
 {
     return pubkey.VerifySchnorr(sighash, sig);
@@ -1708,6 +1746,31 @@ bool GenericTransactionSignatureChecker<T>::CheckECDSASignature(const std::vecto
     uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata, &m_sighash_cache);
 
     if (!VerifyECDSASignature(vchSig, pubkey, sighash))
+        return false;
+
+    return true;
+}
+
+template <class T>
+bool GenericTransactionSignatureChecker<T>::CheckFalconSignature(const std::vector<unsigned char>& vchSigIn, const std::vector<unsigned char>& vchPubKey,const CScript& scriptCode, SigVersion sigversion) const
+{
+    CPubKey pubkey(vchPubKey);
+    if (!pubkey.IsValid())
+        return false;
+
+    // Hash type is one byte tacked on to the end of the signature
+    std::vector<unsigned char> vchSig(vchSigIn);
+    if (vchSig.empty())
+        return false;
+    int nHashType = vchSig.back();
+    vchSig.pop_back();
+
+    // Witness sighashes need the amount.
+    if (sigversion == SigVersion::WITNESS_V0 && amount < 0) return HandleMissingData(m_mdb);
+
+    uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata, &m_sighash_cache);
+
+    if (!VerifyFalconSignature(vchSig, pubkey, sighash))
         return false;
 
     return true;
