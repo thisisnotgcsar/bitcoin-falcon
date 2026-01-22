@@ -19,7 +19,8 @@ Falcon is implemented in pure C and does not require any external dependencies.
 | Signature Size (B)    | 655             | 71           |
 | Verification Time (μs)| 57              | 120          |
 
-> These results were obtained on an Intel(R) N150 CPU (4 cores), 16 GB DDR4 RAM, Ubuntu 24.04, using GCC 13.3.0.  
+> These results were obtained on an Intel(R) N150 CPU (4 cores), 16 GB DDR4 RAM, Ubuntu 24.04, using GCC 13.3.0.
+
 > Verification time is more important than signature creation time, as in Bitcoin, signature creation is performed by clients (wallets), not nodes. The network's main concern is verification speed.
 
 ## Integration
@@ -30,6 +31,14 @@ The scheme has been implemented within the classic P2WPKH mode as a soft-fork. A
 - The [src/CMakeLists.txt](src/CMakeLists.txt) file was modified to include Falcon in the Bitcoin Core build process.
 
 ## Test
+
+From project root directory:
+
+```
+cmake -B build
+cmake --build build -- -j$(nproc)
+./build/bin/test_bitcoin --run_test=falcon_script_tests
+ ```
 
 The test (see [src/test/falcon_script_tests.cpp](src/test/falcon_script_tests.cpp)) benchmarks and compares the Falcon-512 and ECDSA signature schemes within Bitcoin's script verification framework. For each scheme, it:
 
