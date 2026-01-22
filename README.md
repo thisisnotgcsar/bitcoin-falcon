@@ -1,79 +1,47 @@
-Bitcoin Core integration/staging tree
-=====================================
+# Falcon Signature Scheme Integration in Bitcoin Core
 
-https://bitcoincore.org
+## Overview
 
-For an immediately usable, binary version of the Bitcoin Core software, see
-https://bitcoincore.org/en/download/.
+This code demonstrates the integration (as a soft-fork) and benchmarking of the Falcon post-quantum signature scheme (Falcon-512) in Bitcoin Core. Comparison results are provided with respect to the traditional ECDSA scheme within Bitcoin's script verification framework.
 
-What is Bitcoin Core?
----------------------
+This project serves as a practical demonstration of Falcon’s promising performance, highlighting its advantages over currently selected post-quantum signature algorithms such as SPHINCS+ and ML-DSA, which face significant time and space limitations. As Falcon approaches FIPS standardization, this work provides a valuable reference for future adoption and integration in Bitcoin and similar systems.
 
-Bitcoin Core connects to the Bitcoin peer-to-peer network to download and fully
-validate blocks and transactions. It also includes a wallet and graphical user
-interface, which can be optionally built.
+## Why Falcon?
 
-Further information about Bitcoin Core is available in the [doc folder](/doc).
+Falcon is a lattice-based, post-quantum digital signature scheme designed to be secure against quantum attacks. It is a candidate for standardization in the upcoming FIPS standard ([NIST PQC Falcon](https://csrc.nist.gov/Projects/post-quantum-cryptography/selected-algorithms-2022#falcon)). Unlike other post-quantum signature schemes, Falcon is characterized by relatively small signature and public key sizes, as well as efficient signature and verification times.  
+Falcon is implemented in pure C and does not require any external dependencies.
 
-License
--------
+### Falcon vs ECDSA: Time and Space Performance
 
-Bitcoin Core is released under the terms of the MIT license. See [COPYING](COPYING) for more
-information or see https://opensource.org/license/MIT.
+| Aspect                | Falcon (logn=9) | ECDSA         |
+|-----------------------|-----------------|--------------|
+| Public Key Size (B)   | 897             | 33           |
+| Signature Size (B)    | 655             | 71           |
+| Verification Time (μs)| 57              | 120          |
 
-Development Process
--------------------
+> These results were obtained on an Intel(R) N150 CPU (4 cores), 16 GB DDR4 RAM, Ubuntu 24.04, using GCC 13.3.0.  
+> Verification time is more important than signature creation time, as in Bitcoin, signature creation is performed by clients (wallets), not nodes. The network's main concern is verification speed.
 
-The `master` branch is regularly built (see `doc/build-*.md` for instructions) and tested, but it is not guaranteed to be
-completely stable. [Tags](https://github.com/bitcoin/bitcoin/tags) are created
-regularly from release branches to indicate new official, stable release versions of Bitcoin Core.
+## Integration
 
-The https://github.com/bitcoin-core/gui repository is used exclusively for the
-development of the GUI. Its master branch is identical in all monotree
-repositories. Release branches and tags do not exist, so please do not fork
-that repository unless it is for development reasons.
+The scheme has been implemented within the classic P2WPKH mode as a soft-fork. A new script verification flag called `SCRIPT_VERIFY_FALCON` has been added in the [interpreter.h](src/script/interpreter.h) header file to enable Falcon signature verification.
 
-The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md)
-and useful hints for developers can be found in [doc/developer-notes.md](doc/developer-notes.md).
+- Falcon software was obtained from the original authors' [GitHub repository](https://github.com/algorand/falcon) and included as-is in the Bitcoin Core codebase (following Bitcoin Core conventions for external libraries). It was compiled with its default settings and recommended compilation options as suggested by the authors. Note that an official FIPS standard has not yet been released by NIST.
+- The [src/CMakeLists.txt](src/CMakeLists.txt) file was modified to include Falcon in the Bitcoin Core build process.
 
-Testing
--------
+## Test
 
-Testing and code review is the bottleneck for development; we get more pull
-requests than we can review and test on short notice. Please be patient and help out by testing
-other people's pull requests, and remember this is a security-critical project where any mistake might cost people
-lots of money.
+The test (see [src/test/falcon_script_tests.cpp](src/test/falcon_script_tests.cpp)) benchmarks and compares the Falcon-512 and ECDSA signature schemes within Bitcoin's script verification framework. For each scheme, it:
 
-### Automated Testing
+- Generates a keypair.
+- Signs a dummy transaction hash.
+- Constructs a P2WPKH (Pay-to-Witness-Public-Key-Hash) script using the corresponding public key.
+- Verifies the signature using Bitcoin's script interpreter.
+- Measures and prints the public key size, signature size, and verification time.
 
-Developers are strongly encouraged to write [unit tests](src/test/README.md) for new code, and to
-submit new unit tests for old code. Unit tests can be compiled and run
-(assuming they weren't disabled during the generation of the build system) with: `ctest`. Further details on running
-and extending unit tests can be found in [/src/test/README.md](/src/test/README.md).
+## Notes
 
-There are also [regression and integration tests](/test), written
-in Python.
-These tests can be run (if the [test dependencies](/test) are installed) with: `build/test/functional/test_runner.py`
-(assuming `build` is your build directory).
+- This is a demonstration and benchmarking tool, not a production-ready implementation. It is intended for research and reference as the Bitcoin ecosystem explores post-quantum security options.
+- For more information on Falcon and its standardization, see the [NIST PQC Falcon page](https://csrc.nist.gov/Projects/post-quantum-cryptography/selected-algorithms-2022#falcon).
 
-The CI (Continuous Integration) systems make sure that every pull request is tested on Windows, Linux, and macOS.
-The CI must pass on all commits before merge to avoid unrelated CI failures on new pull requests.
-
-### Manual Quality Assurance (QA) Testing
-
-Changes should be tested by somebody other than the developer who wrote the
-code. This is especially important for large or high-risk changes. It is useful
-to add a test plan to the pull request description if testing the changes is
-not straightforward.
-
-Translations
-------------
-
-Changes to translations as well as new translations can be submitted to
-[Bitcoin Core's Transifex page](https://explore.transifex.com/bitcoin/bitcoin/).
-
-Translations are periodically pulled from Transifex and merged into the git repository. See the
-[translation process](doc/translation_process.md) for details on how this works.
-
-**Important**: We do not accept translation changes as GitHub pull requests because the next
-pull from Transifex would automatically overwrite them again.
+---
